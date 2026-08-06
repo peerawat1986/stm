@@ -1,0 +1,49 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <!-- Google Fonts: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- Navbar -->
+  <nav class="navbar glass">
+    <div class="nav-content container">
+      <div class="nav-brand">
+        <i class="ph ph-atom" style="font-size: 28px; color: var(--primary);"></i>
+        <span style="color: var(--primary);">(STMbp)Science Day <span style="font-weight: 300;">2026</span></span>
+      </div>
+      <div class="nav-links">
+        <a href="#" onclick="event.preventDefault(); app.navigate('home')" id="nav-home" class="active">หน้าหลัก
+          (ผลการแข่งขัน)</a>
+        <a href="#" onclick="event.preventDefault(); app.navigate('login')" id="nav-login">สำหรับครู</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="container main-content" id="app-root">
+    <!-- Views will be injected here -->
+    <div class="loader-container">
+      <div class="spinner"></div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>&copy; 2026 Science Day STM Competition System. All rights reserved.</p>
+  </footer>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="config.js"></script><script src="app.js"></script>
+</body>
+
+</html>
