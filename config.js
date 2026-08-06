@@ -1,6 +1,6 @@
 ﻿// === Vercel Configuration ===
 // นำ URL ของ Google Apps Script (Web App) มาวางที่นี่
-const API_URL = "YOUR_GAS_WEBAPP_URL_HERE";
+const API_URL = "https://script.google.com/macros/s/AKfycbwPM4g6FMGKZAoqWDR7Ek3eDG1rsmqYYQ6ZDuSl24-PvdJ9Himgcmitbj7vE4JJqho/exec";
 
 // Polyfill สำหรับจำลองการทำงานของ google.script.run
 window.google = {
