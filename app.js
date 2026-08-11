@@ -1,4 +1,4 @@
-﻿// State Management
+// State Management
   const state = {
     user: null, // Teacher info
     currentView: 'home',
@@ -7,7 +7,9 @@
     recentRegistrations: [], // Store recent registrations
     publicResults: [],
     competitions: [],
-    studentPdfEnabled: false
+    studentPdfEnabled: false,
+    studentRegEnabled: true,
+    recentStudentRegistrations: []
   };
 
   // Views HTML Templates
@@ -136,6 +138,63 @@
       </div>
     `,
 
+    studentReg: `
+      <!-- Space Animation Background -->
+      <div class="space-container">
+        <div class="space-stars"></div>
+        <div class="space-stars2"></div>
+        <div class="comet comet1"></div>
+        <div class="comet comet2"></div>
+        <div class="comet comet3"></div>
+        <div class="space-planet"></div>
+      </div>
+
+      <div class="card dark-glass mb-4">
+        <h2 style="color: #fbbf24; margin-top: 0;"><i class="ph ph-user-plus"></i> นักเรียนลงทะเบียน</h2>
+        <p class="text-muted">เลือกรายการแข่งขันและค้นหาข้อมูลนักเรียนเพื่อลงทะเบียนด้วยตนเอง</p>
+        
+        <div class="form-group">
+          <label class="form-label" style="color: #fff; font-weight: 700; font-size: 1.1rem;">รายการแข่งขัน</label>
+          <select class="form-control" id="reg-competition-student" style="color: #fff; background-color: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
+            <option value="" disabled selected style="color: #333;">กำลังโหลดรายการ...</option>
+          </select>
+        </div>
+        
+        <div class="flex gap-2 mb-4" style="margin-top: 1.5rem;">
+          <input type="text" class="form-control" id="search-student-code-student" placeholder="กรอกรหัสนักเรียน...พิมพ์ชื่อ หรือ ห้อง...">
+          <button class="btn btn-primary" onclick="searchStudent('student')" style="white-space: nowrap;">
+            <i class="ph ph-magnifying-glass"></i> ค้นหา
+          </button>
+        </div>
+        
+        <div id="student-search-result-student"></div>
+        
+        <div id="registration-form-student" style="display: none;">
+          <button class="btn btn-success w-full" id="submit-reg-btn-student" onclick="submitRegistration('student')" style="justify-content: flex-start;">
+            <i class="ph ph-check-circle"></i> บันทึกลงทะเบียน
+          </button>
+        </div>
+      </div>
+
+      <!-- Recent Student Registrations Table -->
+      <div class="card dark-glass" id="recent-student-registrations-wrapper" style="display: none;">
+        <h3 style="margin-top: 0; color: #fbbf24;"><i class="ph ph-clock-counter-clockwise"></i> การลงทะเบียนล่าสุด(ติดต่อครูที่ดูแลกิจกรรม)</h3>
+        <div class="table-responsive">
+          <table id="recent-student-reg-table">
+            <thead>
+              <tr>
+                <th>รายการแข่งขัน</th>
+                <th>รหัสนักเรียน</th>
+                <th>ชื่อ นามสกุล</th>
+                <th>ห้อง</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    `,
+
     dashboard: `
       <div class="dashboard-grid">
         <!-- Sidebar -->
@@ -153,6 +212,9 @@
             <button onclick="switchDashboardTab('committee', this)">
               <i class="ph ph-users-three"></i> ลงชื่อคณะทำงาน
             </button>
+            <button onclick="switchDashboardTab('pending-reg', this)" style="white-space: nowrap;">
+              <i class="ph ph-list-checks"></i> นักเรียนลงทะเบียนเข้ามา
+            </button>
             <button onclick="switchDashboardTab('result', this)" style="white-space: nowrap;">
               <i class="ph ph-medal"></i> บันทึกผลการแข่งขัน
             </button>
@@ -163,7 +225,14 @@
                   <input type="checkbox" id="admin-pdf-toggle" onchange="toggleAdminPdfSetting(this)">
                   <span class="slider"></span>
                 </div>
-                เปิดให้นักเรียนสร้างเกียรติบัตรเอง
+                เปิดให้นักเรียนสร้างเกียรติบัตร
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer mt-2" style="font-size: 0.875rem;">
+                <div class="switch">
+                  <input type="checkbox" id="admin-student-reg-toggle" onchange="toggleAdminStudentRegSetting(this)">
+                  <span class="slider"></span>
+                </div>
+                เปิดระบบนักเรียนลงทะเบียน
               </label>
             </div>
             <button onclick="handleLogout()" style="color: var(--danger); margin-top: 1rem;">
@@ -258,6 +327,46 @@
           </div>
         
 
+          <!-- Pending Reg Tab -->
+          <div id="tab-pending-reg" style="display: none; margin-bottom: 2rem;">
+            <div class="flex justify-between items-center mb-4">
+              <div>
+                <h2 style="margin: 0;">นักเรียนลงทะเบียนเข้ามา</h2>
+                <p class="text-muted m-0">รายการนักเรียนที่รอการยืนยัน (เฉพาะรายการแข่งขันที่คุณรับผิดชอบ)</p>
+              </div>
+              <button class="btn btn-outline" onclick="loadPendingRegistrations()">
+                <i class="ph ph-arrows-clockwise"></i> โหลดข้อมูล
+              </button>
+            </div>
+            
+            <div class="flex justify-between items-center mb-2 mt-4">
+              <h3 style="margin: 0;"><i class="ph ph-list-dashes"></i> รายชื่อที่รอการยืนยัน</h3>
+              <div class="flex gap-2">
+                <button id="btn-delete-selected-pending" class="btn btn-danger btn-sm" onclick="deleteSelectedPending()" style="display: none;">
+                  <i class="ph ph-trash"></i> ลบรายการที่เลือก
+                </button>
+                <button id="btn-confirm-selected-pending" class="btn btn-success btn-sm" onclick="confirmSelectedPending()" style="display: none;">
+                  <i class="ph ph-check"></i> ยืนยันรายการที่เลือก
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+              <table id="pending-reg-table">
+                <thead>
+                  <tr>
+                    <th>รหัสนักเรียน</th>
+                    <th>ชื่อ นามสกุล</th>
+                    <th>ห้อง</th>
+                    <th>รายการแข่งขัน</th>
+                    <th style="width: 40px; text-align: center;"><input type="checkbox" onchange="toggleSelectAllPending(this)" style="width: 1.25rem; height: 1.25rem;"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="5" class="text-center">กดปุ่มโหลดข้อมูลเพื่อแสดงรายชื่อ</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
           
           <!-- Result Tab (Auto-loaded) -->
           <div id="tab-result" style="display: none;">
@@ -283,6 +392,7 @@
       }
 
       loadStudentPdfStatus();
+      loadStudentRegStatus();
       this.navigate(state.user ? 'dashboard' : 'home');
     },
 
@@ -299,6 +409,7 @@
       // Update Navbar
       document.querySelectorAll('.nav-links a').forEach(el => el.classList.remove('active'));
       if (viewName === 'home') document.getElementById('nav-home').classList.add('active');
+      if (viewName === 'studentReg') document.getElementById('nav-student-reg').classList.add('active');
       if (viewName === 'login' || viewName === 'dashboard') document.getElementById('nav-login').classList.add('active');
 
       // Inject View
@@ -309,6 +420,17 @@
       if (viewName === 'home') {
         document.body.classList.add('is-home-view');
         loadPublicResults();
+      } else if (viewName === 'studentReg') {
+        if (!state.studentRegEnabled) {
+          showToast('ระบบนักเรียนลงทะเบียนปิดให้บริการชั่วคราว', 'warning');
+          return app.navigate('home');
+        }
+        document.body.classList.add('is-home-view');
+        loadCompetitions();
+        loadPublicResults();
+        if (state.publicResults.length === 0) {
+          loadPublicResults();
+        }
       } else if (viewName === 'dashboard') {
         document.body.classList.remove('is-home-view');
         document.getElementById('teacher-name-display').textContent = state.user.name;
@@ -319,8 +441,10 @@
         if (state.user && state.user.name.replace(/\s+/g, '') === 'นายพีระวัฒน์ศรีธรรมมา') {
           const adminPanel = document.getElementById('admin-panel');
           if (adminPanel) adminPanel.style.display = 'block';
-          const toggle = document.getElementById('admin-pdf-toggle');
-          if (toggle) toggle.checked = state.studentPdfEnabled;
+          const togglePdf = document.getElementById('admin-pdf-toggle');
+          if (togglePdf) togglePdf.checked = state.studentPdfEnabled;
+          const toggleReg = document.getElementById('admin-student-reg-toggle');
+          if (toggleReg) toggleReg.checked = state.studentRegEnabled;
         }
       } else if (viewName === 'login') {
         document.body.classList.remove('is-home-view');
@@ -357,7 +481,7 @@
   // Logic: Public Results
   function loadPublicResults() {
     const tbody = document.querySelector('#results-table tbody');
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center">กำลังโหลดข้อมูล... <div class="spinner" style="width: 20px; height: 20px; border-width: 2px; margin: 10px auto;"></div></td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center">กำลังโหลดข้อมูล... <div class="spinner" style="width: 20px; height: 20px; border-width: 2px; margin: 10px auto;"></div></td></tr>';
 
     // Check if google.script.run is available (running in GAS environment)
     if (typeof google !== 'undefined' && google.script) {
@@ -365,16 +489,20 @@
         .withSuccessHandler(function (res) {
           if (res.success && res.data.length > 0) {
             state.publicResults = res.data;
-            updateDashboardStats(res.data);
-            renderResultsTable(res.data);
+            if (tbody) {
+              updateDashboardStats(res.data);
+              renderResultsTable(res.data);
+            }
           } else {
             state.publicResults = [];
-            updateDashboardStats([]);
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ยังไม่มีข้อมูลการลงทะเบียน</td></tr>';
+            if (tbody) {
+              updateDashboardStats([]);
+              tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ยังไม่มีข้อมูลการลงทะเบียน</td></tr>';
+            }
           }
         })
         .withFailureHandler(function (err) {
-          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>';
+          if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>';
           showToast('ไม่สามารถโหลดข้อมูลได้', 'error');
         })
         .getPublicResults();
@@ -382,8 +510,10 @@
       // Mock Data for local testing
       setTimeout(() => {
         state.publicResults = [];
-        updateDashboardStats([]);
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ไม่ได้รันบน Google Apps Script (Simulation Mode)</td></tr>';
+        if (tbody) {
+          updateDashboardStats([]);
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ไม่ได้รันบน Google Apps Script (Simulation Mode)</td></tr>';
+        }
       }, 1000);
     }
   }
@@ -663,7 +793,7 @@
     } else if (event && event.pageY) {
       targetY = event.pageY; // Fallback
     }
-    
+
     card.style.marginTop = targetY + 'px';
     card.style.transform = 'translateY(-50%)'; // Perfectly center it vertically
 
@@ -680,6 +810,20 @@
           }
         })
         .getStudentPdfStatus();
+    }
+  }
+
+  function loadStudentRegStatus() {
+    if (typeof google !== 'undefined' && google.script) {
+      google.script.run
+        .withSuccessHandler(function (status) {
+          state.studentRegEnabled = status;
+          if (state.currentView === 'studentReg' && !status) {
+            app.navigate('home');
+            showToast('ระบบนักเรียนลงทะเบียนถูกปิดใช้งานชั่วคราว', 'warning');
+          }
+        })
+        .getStudentRegStatus();
     }
   }
 
@@ -700,6 +844,26 @@
           showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
         })
         .toggleStudentPdfStatus(checkbox.checked, state.user.name);
+    }
+  }
+
+  function toggleAdminStudentRegSetting(checkbox) {
+    if (typeof google !== 'undefined' && google.script) {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.success) {
+            state.studentRegEnabled = checkbox.checked;
+            showToast(res.message);
+          } else {
+            checkbox.checked = !checkbox.checked; // Revert
+            showToast(res.message, 'error');
+          }
+        })
+        .withFailureHandler(function (err) {
+          checkbox.checked = !checkbox.checked; // Revert
+          showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+        })
+        .toggleStudentRegStatus(checkbox.checked, state.user.name);
     }
   }
 
@@ -778,83 +942,93 @@
   // Logic: Load Competitions
   function loadCompetitions() {
     const regSelect = document.getElementById('reg-competition');
+    const regSelectStudent = document.getElementById('reg-competition-student');
     const myCompsContainer = document.getElementById('my-competitions-container');
-    if (!regSelect) return;
+
+    // Proceed if at least one of these exist
+    if (!regSelect && !regSelectStudent && !myCompsContainer) return;
 
     if (typeof google !== 'undefined' && google.script) {
       google.script.run
         .withSuccessHandler(function (res) {
           if (res.success) {
             state.competitions = res.data;
-            const optionsHtml = '<option value="" disabled selected>-- เลือกรายการ --</option>' +
-              res.data.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+            const optionsHtml = '<option value="" disabled selected style="color: #333;">-- เลือกรายการ --</option>' +
+              res.data.map(c => `<option value="${c.name}" style="color: #333;">${c.name}</option>`).join('');
 
-            regSelect.innerHTML = optionsHtml;
+            if (regSelect) regSelect.innerHTML = optionsHtml;
+            if (regSelectStudent) regSelectStudent.innerHTML = optionsHtml;
+
             const regSelectCommittee = document.getElementById('reg-competition-committee');
             if (regSelectCommittee) regSelectCommittee.innerHTML = optionsHtml;
 
             // Render my competitions
-            const myComps = res.data.filter(c => c.t1 === state.user.name || c.t2 === state.user.name);
-            if (myComps.length === 0) {
-              myCompsContainer.innerHTML = '<p class="text-muted">คุณยังไม่ได้รับผิดชอบรายการแข่งขันใดๆ</p>';
-            } else if (myComps.length === 1) {
-              const c = myComps[0];
-              myCompsContainer.innerHTML = `
-                <div class="mb-4" style="border: 1px solid var(--border); padding: 1rem; border-radius: var(--radius);">
-                  <h3 style="color: var(--primary); margin-bottom: 1rem;">${c.name}</h3>
-                  <div id="registrations-container-${c.name}">
-                    <div class="text-center"><i class="ph ph-spinner ph-spin"></i> กำลังโหลดรายชื่อ...</div>
-                  </div>
-                </div>
-              `;
-              loadRegistrations(c.name);
-            } else {
-              const optionsHtml = myComps.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
-              myCompsContainer.innerHTML = `
-                <div class="form-group mb-4">
-                  <label class="form-label">เลือกรายการแข่งขันเพื่อบันทึกผล:</label>
-                  <select class="form-control" id="my-comp-selector" onchange="switchMyComp(this.value)">
-                    ${optionsHtml}
-                  </select>
-                </div>
-                <div id="my-comp-dynamic-wrapper">
-                </div>
-              `;
-
-              window.switchMyComp = function (compName) {
-                const wrapper = document.getElementById('my-comp-dynamic-wrapper');
-                wrapper.innerHTML = `
+            if (myCompsContainer && state.user) {
+              const myComps = res.data.filter(c => c.t1 === state.user.name || c.t2 === state.user.name);
+              if (myComps.length === 0) {
+                myCompsContainer.innerHTML = '<p class="text-muted">คุณยังไม่ได้รับผิดชอบรายการแข่งขันใดๆ</p>';
+              } else if (myComps.length === 1) {
+                const c = myComps[0];
+                myCompsContainer.innerHTML = `
                   <div class="mb-4" style="border: 1px solid var(--border); padding: 1rem; border-radius: var(--radius);">
-                    <h3 style="color: var(--primary); margin-bottom: 1rem;">${compName}</h3>
-                    <div id="registrations-container-${compName}">
+                    <h3 style="color: var(--primary); margin-bottom: 1rem;">${c.name}</h3>
+                    <div id="registrations-container-${c.name}">
                       <div class="text-center"><i class="ph ph-spinner ph-spin"></i> กำลังโหลดรายชื่อ...</div>
                     </div>
                   </div>
                 `;
-                loadRegistrations(compName);
-              };
+                loadRegistrations(c.name);
+              } else {
+                const optionsHtml = myComps.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+                myCompsContainer.innerHTML = `
+                  <div class="form-group mb-4">
+                    <label class="form-label">เลือกรายการแข่งขันเพื่อบันทึกผล:</label>
+                    <select class="form-control" id="my-comp-selector" onchange="switchMyComp(this.value)">
+                      ${optionsHtml}
+                    </select>
+                  </div>
+                  <div id="my-comp-dynamic-wrapper">
+                  </div>
+                `;
 
-              // Load the first one by default
-              window.switchMyComp(myComps[0].name);
+                window.switchMyComp = function (compName) {
+                  const wrapper = document.getElementById('my-comp-dynamic-wrapper');
+                  wrapper.innerHTML = `
+                    <div class="mb-4" style="border: 1px solid var(--border); padding: 1rem; border-radius: var(--radius);">
+                      <h3 style="color: var(--primary); margin-bottom: 1rem;">${compName}</h3>
+                      <div id="registrations-container-${compName}">
+                        <div class="text-center"><i class="ph ph-spinner ph-spin"></i> กำลังโหลดรายชื่อ...</div>
+                      </div>
+                    </div>
+                  `;
+                  loadRegistrations(compName);
+                };
+
+                // Load the first one by default
+                window.switchMyComp(myComps[0].name);
+              }
             }
 
           } else {
-            regSelect.innerHTML = '<option value="" disabled selected>ไม่สามารถโหลดรายการได้</option>';
+            if (regSelect) regSelect.innerHTML = '<option value="" disabled selected>ไม่สามารถโหลดรายการได้</option>';
+            if (regSelectStudent) regSelectStudent.innerHTML = '<option value="" disabled selected>ไม่สามารถโหลดรายการได้</option>';
             if (myCompsContainer) myCompsContainer.innerHTML = '<p class="text-danger">ไม่สามารถโหลดข้อมูลรายการแข่งขันได้</p>';
           }
         })
         .withFailureHandler(function (err) {
-          regSelect.innerHTML = '<option value="" disabled selected>ไม่สามารถโหลดรายการได้</option>';
+          if (regSelect) regSelect.innerHTML = '<option value="" disabled selected>ไม่สามารถโหลดรายการได้</option>';
+          if (regSelectStudent) regSelectStudent.innerHTML = '<option value="" disabled selected>ไม่สามารถโหลดรายการได้</option>';
           if (myCompsContainer) myCompsContainer.innerHTML = '<p class="text-danger">เกิดข้อผิดพลาดในการโหลดข้อมูลรายการแข่งขัน</p>';
         })
         .getCompetitions();
     } else {
       setTimeout(() => {
         state.competitions = [{ name: 'จำลองการแข่งขัน 1', t1: state.user?.name, t2: '' }];
-        regSelect.innerHTML = '<option value="" disabled selected>-- เลือกรายการ --</option><option value="จำลองการแข่งขัน 1">จำลองการแข่งขัน 1</option>';
+        if (regSelect) regSelect.innerHTML = '<option value="" disabled selected>-- เลือกรายการ --</option><option value="จำลองการแข่งขัน 1">จำลองการแข่งขัน 1</option>';
+        if (regSelectStudent) regSelectStudent.innerHTML = '<option value="" disabled selected>-- เลือกรายการ --</option><option value="จำลองการแข่งขัน 1">จำลองการแข่งขัน 1</option>';
         const regSelectCommittee = document.getElementById('reg-competition-committee');
-        if (regSelectCommittee) regSelectCommittee.innerHTML = regSelect.innerHTML;
-        if (myCompsContainer) {
+        if (regSelectCommittee) regSelectCommittee.innerHTML = regSelect ? regSelect.innerHTML : regSelectStudent.innerHTML;
+        if (myCompsContainer && state.user) {
           myCompsContainer.innerHTML = `
             <div class="mb-4" style="border: 1px solid var(--border); padding: 1rem; border-radius: var(--radius);">
               <h3 style="color: var(--primary); margin-bottom: 1rem;">จำลองการแข่งขัน 1</h3>
@@ -1139,12 +1313,17 @@
     // Hide all tabs
     document.getElementById('tab-register').style.display = 'none';
     document.getElementById('tab-committee').style.display = 'none';
+    document.getElementById('tab-pending-reg').style.display = 'none';
     document.getElementById('tab-result').style.display = 'none';
 
     // Show selected tab
     document.getElementById('tab-' + tab).style.display = 'block';
 
     state.activeTab = tab;
+
+    if (tab === 'pending-reg') {
+      loadPendingRegistrations();
+    }
 
     const recentRegWrapper = document.getElementById('recent-registrations-wrapper');
     if (recentRegWrapper) {
@@ -1155,9 +1334,10 @@
 
   function searchStudent(tab = 'register') {
     const isCommittee = tab === 'committee';
-    const inputId = isCommittee ? 'search-student-code-committee' : 'search-student-code';
-    const resultDivId = isCommittee ? 'student-search-result-committee' : 'student-search-result';
-    const formId = isCommittee ? 'registration-form-committee' : 'registration-form';
+    const isStudent = tab === 'student';
+    const inputId = isCommittee ? 'search-student-code-committee' : (isStudent ? 'search-student-code-student' : 'search-student-code');
+    const resultDivId = isCommittee ? 'student-search-result-committee' : (isStudent ? 'student-search-result-student' : 'student-search-result');
+    const formId = isCommittee ? 'registration-form-committee' : (isStudent ? 'registration-form-student' : 'registration-form');
 
     const code = document.getElementById(inputId).value;
     const resultDiv = document.getElementById(resultDivId);
@@ -1181,6 +1361,28 @@
               renderStudentSelection(res.data, resultDivId, tab);
             }
             showRegistrationForm(tab);
+
+            // Show existing registrations for this student
+            if (isStudent) {
+              if (state.publicResults && state.publicResults.length > 0) {
+                const searchedIds = res.data.map(s => s.id.toString());
+                const existingRegs = state.publicResults.filter(r => r['รหัสนักเรียน'] && searchedIds.includes(r['รหัสนักเรียน'].toString()));
+
+                const existingRegsMapped = existingRegs.map(r => {
+                  const stu = res.data.find(s => s.id.toString() === r['รหัสนักเรียน'].toString());
+                  return {
+                    comp: r['รายการแข่งขัน'],
+                    id: r['รหัสนักเรียน'],
+                    name: r['ชื่อ นามสกุล'],
+                    room: stu ? stu.room : '-'
+                  };
+                });
+
+                // Overwrite to ONLY show the searched student's registrations
+                state.recentStudentRegistrations = existingRegsMapped;
+              }
+              renderRecentStudentRegistrations();
+            }
           } else {
             resultDiv.innerHTML = `<p class="text-danger"><i class="ph ph-warning-circle"></i> ${res.message}</p>`;
             state.selectedStudents = [];
@@ -1241,13 +1443,14 @@
 
   function showRegistrationForm(tab = 'register') {
     const isCommittee = tab === 'committee';
-    const formId = isCommittee ? 'registration-form-committee' : 'registration-form';
+    const isStudent = tab === 'student';
+    const formId = isCommittee ? 'registration-form-committee' : (isStudent ? 'registration-form-student' : 'registration-form');
     document.getElementById(formId).style.display = 'block';
 
     // Default competition
-    const selectId = isCommittee ? 'reg-competition-committee' : 'reg-competition';
+    const selectId = isCommittee ? 'reg-competition-committee' : (isStudent ? 'reg-competition-student' : 'reg-competition');
     const regSelect = document.getElementById(selectId);
-    if (state.competitions && state.user) {
+    if (state.competitions && state.user && !isStudent) {
       const myComps = state.competitions.filter(c => c.t1 === state.user.name || c.t2 === state.user.name);
       if (myComps.length > 0) {
         regSelect.value = myComps[0].name;
@@ -1308,6 +1511,7 @@
 
   function submitRegistration(tab = 'register') {
     const isCommittee = tab === 'committee';
+    const isStudent = tab === 'student';
     const checkboxes = document.querySelectorAll(`.student-checkbox-${tab}`);
     if (checkboxes.length > 0) {
       const checked = document.querySelectorAll(`.student-checkbox-${tab}:checked`);
@@ -1320,7 +1524,7 @@
 
     if (!state.selectedStudents || state.selectedStudents.length === 0) return;
 
-    const selectId = isCommittee ? 'reg-competition-committee' : 'reg-competition';
+    const selectId = isCommittee ? 'reg-competition-committee' : (isStudent ? 'reg-competition-student' : 'reg-competition');
     const compSelector = document.getElementById(selectId);
     const compName = compSelector.value;
 
@@ -1334,11 +1538,11 @@
       studentName: student.name,
       studentRoom: student.room,
       competitionName: compName,
-      teacherName: state.user.name,
-      award: isCommittee ? 'เป็นคณะดำเนินงาน' : 'เข้าร่วม'
+      teacherName: state.user ? state.user.name : '',
+      award: isCommittee ? 'เป็นคณะดำเนินงาน' : (isStudent ? '' : 'เข้าร่วม')
     }));
 
-    const submitBtnId = isCommittee ? 'submit-reg-btn-committee' : 'submit-reg-btn';
+    const submitBtnId = isCommittee ? 'submit-reg-btn-committee' : (isStudent ? 'submit-reg-btn-student' : 'submit-reg-btn');
     const submitBtn = document.getElementById(submitBtnId);
     if (submitBtn) {
       submitBtn.disabled = true;
@@ -1348,16 +1552,23 @@
     const resetBtn = () => {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = isCommittee ? '<i class="ph ph-check-circle"></i> บันทึกคณะทำงาน' : '<i class="ph ph-check-circle"></i> บันทึกลงทะเบียน';
+        let btnText = '<i class="ph ph-check-circle"></i> บันทึกลงทะเบียน';
+        if (isCommittee) btnText = '<i class="ph ph-check-circle"></i> บันทึกคณะทำงาน';
+        submitBtn.innerHTML = btnText;
       }
     };
 
     if (typeof google !== 'undefined' && google.script) {
-      google.script.run
-        .withSuccessHandler(function (res) {
-          resetBtn();
-          if (res.success) {
-            showToast(res.message);
+      const apiCall = isStudent
+        ? google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).saveStudentSelfRegistration(dataArray)
+        : google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).saveMultipleRegistrations(dataArray);
+
+      function onSuccess(res) {
+        resetBtn();
+        if (res.success) {
+          showToast(res.message);
+
+          if (!isStudent) {
             // Add to recent
             dataArray.forEach(d => {
               state.recentRegistrations.push({
@@ -1369,36 +1580,268 @@
               });
             });
             renderRecentRegistrations();
-
-            // Silently update the result tab for this competition
             loadRegistrations(compName);
-
-            // Reset form
-            const inputId = isCommittee ? 'search-student-code-committee' : 'search-student-code';
-            const resultDivId = isCommittee ? 'student-search-result-committee' : 'student-search-result';
-            const formId = isCommittee ? 'registration-form-committee' : 'registration-form';
-
-            document.getElementById(inputId).value = '';
-            document.getElementById(resultDivId).innerHTML = '';
-            document.getElementById(formId).style.display = 'none';
-            document.getElementById(selectId).selectedIndex = 0;
-            state.selectedStudents = [];
           } else {
-            showToast(res.message, 'error');
+            // Add to recent student registrations
+            dataArray.forEach(d => {
+              state.recentStudentRegistrations.push({
+                id: d.studentId,
+                name: d.studentName,
+                room: d.studentRoom,
+                comp: compName
+              });
+              
+              // Also add to publicResults so it persists on next search
+              if (state.publicResults) {
+                state.publicResults.push({
+                  'รหัสนักเรียน': d.studentId,
+                  'ชื่อ นามสกุล': d.studentName,
+                  'ห้อง': d.studentRoom,
+                  'รายการแข่งขัน': compName,
+                  'ผลรางวัล': ''
+                });
+              }
+            });
+            renderRecentStudentRegistrations();
           }
-        })
-        .withFailureHandler(function (err) {
-          resetBtn();
-          showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
-        })
-        .saveMultipleRegistrations(dataArray);
+
+          // Reset form
+          const inputId = isCommittee ? 'search-student-code-committee' : (isStudent ? 'search-student-code-student' : 'search-student-code');
+          const resultDivId = isCommittee ? 'student-search-result-committee' : (isStudent ? 'student-search-result-student' : 'student-search-result');
+          const formId = isCommittee ? 'registration-form-committee' : (isStudent ? 'registration-form-student' : 'registration-form');
+
+          document.getElementById(inputId).value = '';
+          document.getElementById(resultDivId).innerHTML = '';
+          document.getElementById(formId).style.display = 'none';
+          document.getElementById(selectId).selectedIndex = 0;
+          state.selectedStudents = [];
+        } else {
+          showToast(res.message, 'error');
+        }
+      }
+
+      function onFailure(err) {
+        resetBtn();
+        showToast('เกิดข้อผิดพลาดในการบันทึก', 'error');
+      }
     } else {
       setTimeout(() => {
         resetBtn();
         showToast('Simulation: บันทึกลงทะเบียนแล้ว');
+        if (isStudent) {
+          dataArray.forEach(d => {
+            state.recentStudentRegistrations.push({
+              id: d.studentId,
+              name: d.studentName,
+              room: d.studentRoom,
+              comp: compName
+            });
+          });
+          renderRecentStudentRegistrations();
+        }
       }, 1000);
     }
   }
+
+  function renderRecentStudentRegistrations() {
+    const wrapper = document.getElementById('recent-student-registrations-wrapper');
+    const tbody = document.querySelector('#recent-student-reg-table tbody');
+    if (!wrapper || !tbody) return;
+
+    if (state.recentStudentRegistrations.length === 0) {
+      wrapper.style.display = 'none';
+      return;
+    }
+
+    wrapper.style.display = 'block';
+    tbody.innerHTML = '';
+
+    // Show newest first
+    const reversed = [...state.recentStudentRegistrations].reverse();
+
+    reversed.forEach(reg => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="white-space: nowrap;">${reg.comp}</td>
+        <td>${reg.id}</td>
+        <td style="white-space: nowrap;">${reg.name}</td>
+        <td>${reg.room || '-'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function loadPendingRegistrations() {
+    const tbody = document.querySelector('#pending-reg-table tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center"><i class="ph ph-spinner ph-spin"></i> กำลังโหลดข้อมูล...</td></tr>';
+
+    if (!state.competitions || state.competitions.length === 0) {
+      if (typeof google !== 'undefined' && google.script) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted"><i class="ph ph-spinner ph-spin"></i> กำลังเตรียมข้อมูลรายการแข่งขัน...</td></tr>';
+        setTimeout(loadPendingRegistrations, 1500);
+        return;
+      }
+    }
+
+    if (typeof google !== 'undefined' && google.script) {
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.success && res.data.length > 0) {
+            renderPendingRegistrations(res.data);
+          } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ไม่มีรายการนักเรียนที่รอการยืนยันในรายการของคุณ</td></tr>';
+            document.getElementById('btn-confirm-selected-pending').style.display = 'none';
+            document.getElementById('btn-delete-selected-pending').style.display = 'none';
+          }
+        })
+        .withFailureHandler(function (err) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>';
+          showToast('ไม่สามารถโหลดข้อมูลได้', 'error');
+        })
+        .getPendingRegistrations();
+    } else {
+      setTimeout(() => {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Simulation: ไม่มีรายการนักเรียนที่รอการยืนยัน</td></tr>';
+      }, 1000);
+    }
+  }
+
+  function renderPendingRegistrations(data) {
+    const tbody = document.querySelector('#pending-reg-table tbody');
+    tbody.innerHTML = '';
+
+    const myComps = state.competitions ? state.competitions.filter(c => c.t1 === state.user?.name || c.t2 === state.user?.name).map(c => c.name) : [];
+    const filteredData = data.filter(reg => myComps.includes(reg.comp));
+
+    if (filteredData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">ไม่มีรายการนักเรียนที่รอการยืนยันในรายการของคุณ</td></tr>';
+      document.getElementById('btn-confirm-selected-pending').style.display = 'none';
+      document.getElementById('btn-delete-selected-pending').style.display = 'none';
+      return;
+    }
+
+    filteredData.forEach(reg => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${reg.id}</td>
+        <td style="white-space: nowrap;">${reg.name}</td>
+        <td>${reg.room || '-'}</td>
+        <td>${reg.comp}</td>
+        <td style="text-align: center;">
+          <input type="checkbox" class="pending-reg-cb" value='${JSON.stringify({ studentId: reg.id, compName: reg.comp })}' onchange="checkPendingSelection()" style="width: 1.25rem; height: 1.25rem;">
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    checkPendingSelection();
+  }
+
+  window.toggleSelectAllPending = function (checkbox) {
+    const cbs = document.querySelectorAll('.pending-reg-cb');
+    cbs.forEach(cb => cb.checked = checkbox.checked);
+    checkPendingSelection();
+  };
+
+  window.checkPendingSelection = function () {
+    const anyChecked = document.querySelectorAll('.pending-reg-cb:checked').length > 0;
+    const btnConfirm = document.getElementById('btn-confirm-selected-pending');
+    const btnDelete = document.getElementById('btn-delete-selected-pending');
+    if (btnConfirm) btnConfirm.style.display = anyChecked ? 'inline-flex' : 'none';
+    if (btnDelete) btnDelete.style.display = anyChecked ? 'inline-flex' : 'none';
+  };
+
+  window.deleteSelectedPending = function () {
+    const checked = document.querySelectorAll('.pending-reg-cb:checked');
+    if (checked.length === 0) return;
+
+    if (!confirm(`คุณต้องการลบรายการที่เลือกจำนวน ${checked.length} รายการ ใช่หรือไม่?\nข้อมูลนี้จะถูกลบออกจากฐานข้อมูลและไม่สามารถกู้คืนได้`)) return;
+
+    const btn = document.getElementById('btn-delete-selected-pending');
+    const originalBtnText = btn.innerHTML;
+    btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> กำลังลบ...';
+    btn.disabled = true;
+
+    const allCbs = document.querySelectorAll('.pending-reg-cb, #pending-reg-table thead input[type="checkbox"]');
+    allCbs.forEach(cb => cb.disabled = true);
+
+    const recordsToDelete = Array.from(checked).map(cb => JSON.parse(cb.value));
+
+    if (typeof google !== 'undefined' && google.script) {
+      showToast(`กำลังลบ ${recordsToDelete.length} รายการ...`, 'info');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.innerHTML = originalBtnText;
+          btn.disabled = false;
+          if (res.success) {
+            showToast(res.message);
+            const selectAllCb = document.querySelector('#pending-reg-table thead input[type="checkbox"]');
+            if (selectAllCb) selectAllCb.checked = false;
+            loadPendingRegistrations();
+
+            // Optionally reload teacher registrations if they were related
+            loadTeacherRegistrations();
+          } else {
+            allCbs.forEach(cb => cb.disabled = false);
+            showToast(res.message, 'error');
+          }
+        })
+        .withFailureHandler(function (err) {
+          btn.innerHTML = originalBtnText;
+          btn.disabled = false;
+          allCbs.forEach(cb => cb.disabled = false);
+          showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+        })
+        .deleteMultipleRecentRegistrations(recordsToDelete, state.user.name);
+    }
+  };
+
+  window.confirmSelectedPending = function () {
+    const checked = document.querySelectorAll('.pending-reg-cb:checked');
+    if (checked.length === 0) return;
+    if (!confirm(`คุณต้องการยืนยันรายการที่เลือกจำนวน ${checked.length} รายการ ใช่หรือไม่?`)) return;
+
+    const btn = document.getElementById('btn-confirm-selected-pending');
+    const originalBtnText = btn.innerHTML;
+    btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> กำลังยืนยัน...';
+    btn.disabled = true;
+
+    const allCbs = document.querySelectorAll('.pending-reg-cb, #pending-reg-table thead input[type="checkbox"]');
+    allCbs.forEach(cb => cb.disabled = true);
+
+    const recordsToConfirm = Array.from(checked).map(cb => JSON.parse(cb.value));
+
+    if (typeof google !== 'undefined' && google.script) {
+      showToast(`กำลังยืนยัน ${recordsToConfirm.length} รายการ...`, 'info');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          btn.innerHTML = originalBtnText;
+          btn.disabled = false;
+          if (res.success) {
+            showToast(res.message);
+            // Uncheck header checkbox
+            const selectAllCb = document.querySelector('#pending-reg-table thead input[type="checkbox"]');
+            if (selectAllCb) selectAllCb.checked = false;
+
+            // Refresh from server
+            loadPendingRegistrations();
+            loadTeacherRegistrations();
+          } else {
+            allCbs.forEach(cb => cb.disabled = false);
+            showToast(res.message, 'error');
+          }
+        })
+        .withFailureHandler(function (err) {
+          btn.innerHTML = originalBtnText;
+          btn.disabled = false;
+          allCbs.forEach(cb => cb.disabled = false);
+          showToast('เกิดข้อผิดพลาดในการเชื่อมต่อ', 'error');
+        })
+        .confirmPendingRegistrations(recordsToConfirm, state.user.name);
+    }
+  };
   function loadRegistrations(compName) {
     const container = document.getElementById(`registrations-container-${compName}`);
     if (!container) return;
