@@ -698,6 +698,173 @@ function getRegistrationsByCompetition(competitionName) {
   }
 }
 
+// API: Save Student Self Registration
+function saveStudentSelfRegistration(dataArray) {
+  try {
+    if (!getStudentRegStatus()) {
+      return { success: false, message: 'ระบบนักเรียนลงทะเบียนถูกปิดใช้งานอยู่' };
+    }
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    let sheet = ss.getSheetByName('ลงทะเบียนแข่งขัน');
+
+    let existingData = sheet.getDataRange().getValues();
+    let headers = existingData[0];
+
+    if (!headers || headers.length === 0) {
+      headers = ['วันที่บันทึก', 'รหัสนักเรียน', 'ชื่อ นามสกุล', 'ห้อง', 'รายการแข่งขัน', 'ผู้บันทึก', 'ผลรางวัล', 'เลขที่เกียรติบัตร', 'ลิงก์เกียรติบัตร'];
+      sheet.appendRow(headers);
+      existingData = [headers];
+    }
+
+    const timestamp = new Date();
+    const rows = [];
+    const idCol = headers.indexOf('รหัสนักเรียน');
+    const compCol = headers.indexOf('รายการแข่งขัน');
+
+    let addedCount = 0;
+
+    for (const data of dataArray) {
+      let isDuplicate = false;
+      if (idCol !== -1 && compCol !== -1) {
+        for (let i = 1; i < existingData.length; i++) {
+          if (existingData[i][idCol].toString() === data.studentId.toString() &&
+            existingData[i][compCol].toString() === data.competitionName.toString()) {
+            isDuplicate = true;
+            break;
+          }
+        }
+      }
+
+      if (!isDuplicate) {
+        const row = new Array(headers.length).fill('');
+        const setVal = (colName, val) => {
+          const idx = headers.indexOf(colName);
+          if (idx !== -1) row[idx] = val;
+        };
+
+        setVal('วันที่บันทึก', timestamp);
+        setVal('รหัสนักเรียน', data.studentId);
+        setVal('ชื่อ นามสกุล', data.studentName);
+        setVal('ห้อง', data.studentRoom || '');
+        setVal('รายการแข่งขัน', data.competitionName);
+        setVal('ผู้บันทึก', '');
+        setVal('ผลรางวัล', '');
+        setVal('เลขที่เกียรติบัตร', '');
+        setVal('ลิงก์เกียรติบัตร', '');
+
+        rows.push(row);
+        addedCount++;
+      }
+    }
+
+    if (rows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+      return { success: true, message: `บันทึกลงทะเบียนสำเร็จ` };
+    } else {
+      return { success: false, message: 'นักเรียนที่เลือก ได้ลงทะเบียนในรายการนี้ไปแล้ว' };
+    }
+  } catch (error) {
+    return { success: false, message: 'เกิดข้อผิดพลาด: ' + error.toString() };
+  }
+}
+
+// API: Get Pending Registrations
+function getPendingRegistrations() {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('ลงทะเบียนแข่งขัน');
+    if (!sheet) return { success: true, data: [] };
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return { success: true, data: [] };
+
+    const headers = data[0];
+    const idCol = headers.indexOf('รหัสนักเรียน');
+    const nameCol = headers.indexOf('ชื่อ นามสกุล');
+    const compCol = headers.indexOf('รายการแข่งขัน');
+    const roomCol = headers.indexOf('ห้อง');
+    const awardCol = headers.indexOf('ผลรางวัล');
+
+    if (idCol === -1 || nameCol === -1 || compCol === -1) {
+      return { success: true, data: [] };
+    }
+
+    const results = [];
+    for (let i = 1; i < data.length; i++) {
+      const award = awardCol !== -1 ? data[i][awardCol].toString().trim() : '';
+      if (award === '') {
+        results.push({
+          id: data[i][idCol],
+          name: data[i][nameCol],
+          comp: data[i][compCol],
+          room: roomCol !== -1 ? data[i][roomCol] : '',
+          rowIdx: i + 1
+        });
+      }
+    }
+    return { success: true, data: results };
+  } catch (error) {
+    return { success: false, message: 'เกิดข้อผิดพลาด: ' + error.toString() };
+  }
+}
+
+// API: Confirm Pending Registrations
+function confirmPendingRegistrations(records, teacherName) {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName('ลงทะเบียนแข่งขัน');
+    if (!sheet) return { success: false, message: 'ไม่พบฐานข้อมูลลงทะเบียน' };
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idCol = headers.indexOf('รหัสนักเรียน');
+    const compCol = headers.indexOf('รายการแข่งขัน');
+    const teacherCol = headers.indexOf('ผู้บันทึก');
+    const awardCol = headers.indexOf('ผลรางวัล');
+    const certNumCol = headers.indexOf('เลขที่เกียรติบัตร');
+
+    if (idCol === -1 || compCol === -1 || teacherCol === -1 || awardCol === -1) {
+      return { success: false, message: 'โครงสร้างคอลัมน์ไม่ถูกต้อง' };
+    }
+
+    let maxCertNum = 255;
+    if (certNumCol !== -1) {
+      for (let i = 1; i < data.length; i++) {
+        const num = parseInt(data[i][certNumCol], 10);
+        if (!isNaN(num) && num > maxCertNum) {
+          maxCertNum = num;
+        }
+      }
+    }
+
+    let confirmedCount = 0;
+
+    for (const rec of records) {
+      // Find row
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][idCol].toString() === rec.studentId.toString() &&
+            data[i][compCol].toString() === rec.compName.toString() &&
+            data[i][awardCol].toString().trim() === '') {
+          
+          sheet.getRange(i + 1, awardCol + 1).setValue('เข้าร่วม');
+          sheet.getRange(i + 1, teacherCol + 1).setValue(teacherName);
+          
+          if (certNumCol !== -1) {
+            maxCertNum++;
+            sheet.getRange(i + 1, certNumCol + 1).setValue(maxCertNum);
+          }
+          
+          confirmedCount++;
+          break;
+        }
+      }
+    }
+
+    return { success: true, message: `ยืนยันรายการสำเร็จ ${confirmedCount} รายการ` };
+  } catch (error) {
+    return { success: false, message: 'เกิดข้อผิดพลาด: ' + error.toString() };
+  }
+}
+
 // API: Generate PDF Certificate
 function generateCertificatePDF(studentId, compName, teacherName, targetAward) {
   try {
@@ -837,6 +1004,23 @@ function toggleStudentPdfStatus(isEnabled, teacherName) {
   return { success: true, message: isEnabled ? 'เปิดระบบสร้างเกียรติบัตรให้นักเรียนแล้ว' : 'ปิดระบบสร้างเกียรติบัตรสำหรับนักเรียนแล้ว' };
 }
 
+// API: Get Student Reg Status
+function getStudentRegStatus() {
+  const props = PropertiesService.getScriptProperties();
+  const status = props.getProperty('STUDENT_REG_ENABLED');
+  return status === null ? true : status === 'true';
+}
+
+// API: Toggle Student Reg Status
+function toggleStudentRegStatus(isEnabled, teacherName) {
+  if (teacherName.replace(/\s+/g, '') !== 'นายพีระวัฒน์ศรีธรรมมา') {
+    return { success: false, message: 'คุณไม่มีสิทธิ์เปลี่ยนการตั้งค่านี้' };
+  }
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('STUDENT_REG_ENABLED', isEnabled ? 'true' : 'false');
+  return { success: true, message: isEnabled ? 'เปิดระบบนักเรียนลงทะเบียนแล้ว' : 'ปิดระบบนักเรียนลงทะเบียนแล้ว' };
+}
+
 // API: Student Generate PDF
 function studentGenerateCertificatePDF(studentId, compName, targetAward) {
   try {
@@ -949,7 +1133,7 @@ function doPost(e) {
     const action = payload.action;
     const args = payload.args || [];
     let result = { success: false, message: 'Invalid action' };
-    
+
     switch (action) {
       case 'verifyLogin': result = verifyLogin(args[0], args[1]); break;
       case 'searchStudent': result = searchStudent(args[0]); break;
@@ -966,11 +1150,16 @@ function doPost(e) {
       case 'generateCertificatePDF': result = generateCertificatePDF(args[0], args[1], args[2], args[3]); break;
       case 'getStudentPdfStatus': result = getStudentPdfStatus(); break;
       case 'toggleStudentPdfStatus': result = toggleStudentPdfStatus(args[0], args[1]); break;
+      case 'getStudentRegStatus': result = getStudentRegStatus(); break;
+      case 'toggleStudentRegStatus': result = toggleStudentRegStatus(args[0], args[1]); break;
       case 'studentGenerateCertificatePDF': result = studentGenerateCertificatePDF(args[0], args[1], args[2]); break;
       case 'deletePdfFile': result = deletePdfFile(args[0]); break;
+      case 'saveStudentSelfRegistration': result = saveStudentSelfRegistration(args[0]); break;
+      case 'getPendingRegistrations': result = getPendingRegistrations(); break;
+      case 'confirmPendingRegistrations': result = confirmPendingRegistrations(args[0], args[1]); break;
       default: result = { success: false, message: 'Action not found: ' + action };
     }
-    
+
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'API Error: ' + error.toString() })).setMimeType(ContentService.MimeType.JSON);
